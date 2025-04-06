@@ -6,42 +6,242 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Scraper</title>
+    <meta name="description" content="Web data extraction tool that can scrape and extract structured data from any website">
+    <meta name="keywords" content="web scraper, data extraction, web crawler, content extraction">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="ExtractWeb">
+    <title>ExtractWeb - Smart Web Data Extraction Tool</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕸️</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/languages/json.min.js"></script>
     <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2980b9;
+            --bg-color: #f9f9f9;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
         }
-        textarea, input {
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px 0;
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+
+        header p {
+            margin: 10px 0 0;
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        form {
+            display: grid;
+            grid-gap: 15px;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        input, textarea {
             width: 100%;
-            margin-bottom: 10px;
-        }
-        pre {
-            background: #f4f4f4;
-            padding: 10px;
+            padding: 12px;
             border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            transition: border 0.3s;
+            box-sizing: border-box;
+        }
+
+        input:focus, textarea:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .results h2 {
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+
+        .result-card {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        pre {
+            background: #f8f8f8;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background-color: #ffecec;
+            color: #ff5252;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            header h1 {
+                font-size: 2rem;
+            }
+            
+            .card, .result-card {
+                padding: 15px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="app">
-        <h1>Web Scraper</h1>
-        <form @submit.prevent="extractData">
-            <label for="url">URL:</label>
-            <input type="text" v-model="url" required>
-            <br>
-            <label for="instruction">Instruction (optional):</label>
-            <textarea v-model="instruction"></textarea>
-            <br>
-            <button type="submit">Extract Data</button>
-        </form>
+        <header>
+            <div class="container">
+                <h1>ExtractWeb</h1>
+                <p>Extract structured data from any website</p>
+            </div>
+        </header>
         
-        <div v-if="response">
-            <h2>Extracted Schema:</h2>
-            <pre>{{ response.schema }}</pre>
-            <h2>Extracted Data:</h2>
-            <pre>{{ response.data }}</pre>
+        <div class="container">
+            <div class="card">
+                <form @submit.prevent="extractData">
+                    <div>
+                        <label for="url">Website URL:</label>
+                        <input 
+                            type="url" 
+                            id="url" 
+                            v-model="url" 
+                            required 
+                            placeholder="https://example.com"
+                            :disabled="loading"
+                        >
+                    </div>
+                    
+                    <div>
+                        <label for="instruction">Extraction Instructions (optional):</label>
+                        <textarea 
+                            id="instruction" 
+                            v-model="instruction" 
+                            placeholder="Describe what data you want to extract. For example: 'Extract product names, prices, and descriptions from this e-commerce page'"
+                            :disabled="loading"
+                        ></textarea>
+                    </div>
+                    
+                    <button type="submit" :disabled="loading || !url">
+                        <span v-if="loading" class="spinner"></span>
+                        {{ loading ? 'Processing...' : 'Extract Data' }}
+                    </button>
+                </form>
+            </div>
+            
+            <div v-if="error" class="error-message">
+                <strong>Error:</strong> {{ error }}
+            </div>
+            
+            <div v-if="response" class="results">
+                <div class="result-card">
+                    <h2>Extracted Schema:</h2>
+                    <pre><code class="language-json">{{ prettySchema }}</code></pre>
+                </div>
+                
+                <div class="result-card">
+                    <h2>Extracted Data:</h2>
+                    <pre><code class="language-json">{{ prettyData }}</code></pre>
+                </div>
+            </div>
         </div>
     </div>
     <script>
@@ -51,21 +251,71 @@
                 return {
                     url: '',
                     instruction: '',
-                    response: null
+                    response: null,
+                    loading: false,
+                    error: null
                 };
+            },
+            computed: {
+                prettySchema() {
+                    if (!this.response?.schema) return '';
+                    
+                    try {
+                        // First check if it's already an object
+                        if (typeof this.response.schema === 'object') {
+                            return JSON.stringify(this.response.schema, null, 2);
+                        }
+                        // Try parsing as JSON string
+                        return JSON.stringify(JSON.parse(this.response.schema), null, 2);
+                    } catch (e) {
+                        // If parsing fails, return as is
+                        return this.response.schema;
+                    }
+                },
+                prettyData() {
+                    if (!this.response?.data) return '';
+                    
+                    try {
+                        // Handle if data is already an object
+                        if (typeof this.response.data === 'object') {
+                            return JSON.stringify(this.response.data, null, 2);
+                        }
+                        // Try parsing as JSON string
+                        return JSON.stringify(JSON.parse(this.response.data), null, 2);
+                    } catch (e) {
+                        // If parsing fails, return as is
+                        return this.response.data;
+                    }
+                }
             },
             methods: {
                 async extractData() {
+                    this.error = null;
+                    this.loading = true;
+                    
                     try {
                         const res = await fetch('/extract', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ url: this.url, instruction: this.instruction })
                         });
+                        
+                        if (!res.ok) {
+                            const errorData = await res.json();
+                            throw new Error(errorData.detail || 'Failed to extract data');
+                        }
+                        
                         this.response = await res.json();
+                        this.$nextTick(() => {
+                            document.querySelectorAll('pre code').forEach((block) => {
+                                hljs.highlightElement(block);
+                            });
+                        });
                     } catch (error) {
                         console.error(error);
-                        alert('Data extraction failed!');
+                        this.error = error.message || 'An unexpected error occurred';
+                    } finally {
+                        this.loading = false;
                     }
                 }
             }
