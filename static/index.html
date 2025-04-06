@@ -171,6 +171,49 @@
             margin-bottom: 20px;
         }
 
+        .display-toggle {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }
+        
+        .toggle-btn {
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 14px;
+        }
+        
+        .toggle-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        .data-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        
+        .data-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -239,7 +282,28 @@
                 
                 <div class="result-card">
                     <h2>Extracted Data:</h2>
-                    <pre><code class="language-json">{{ prettyData }}</code></pre>
+                    <div class="display-toggle">
+                        <button class="toggle-btn" :class="{ active: displayMode === 'table' }" @click="displayMode = 'table'">Table</button>
+                        <button class="toggle-btn" :class="{ active: displayMode === 'json' }" @click="displayMode = 'json'">JSON</button>
+                    </div>
+                    <div v-if="displayMode === 'json'">
+                        <pre><code class="language-json">{{ prettyData }}</code></pre>
+                    </div>
+                    <div v-else-if="displayMode === 'table' && tableData">
+                        <table v-if="tableData.headers.length > 0" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th v-for="header in tableData.headers" :key="header">{{ header }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(row, index) in tableData.rows" :key="index">
+                                    <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else>This data cannot be displayed in table format.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -253,7 +317,8 @@
                     instruction: '',
                     response: null,
                     loading: false,
-                    error: null
+                    error: null,
+                    displayMode: 'table'  // Default to table view
                 };
             },
             computed: {
@@ -285,6 +350,72 @@
                     } catch (e) {
                         // If parsing fails, return as is
                         return this.response.data;
+                    }
+                },
+                tableData() {
+                    if (!this.response?.data) return null;
+                    
+                    try {
+                        let data;
+                        // Handle if data is already an object or a JSON string
+                        if (typeof this.response.data === 'object') {
+                            data = this.response.data;
+                        } else {
+                            data = JSON.parse(this.response.data);
+                        }
+                        
+                        // Check if data contains error key with true value
+                        if (data.error == true) {
+                            return null; // Don't render as table if error is true
+                        }
+                        
+                        // Handle array of objects (most common case for tables)
+                        if (Array.isArray(data)) {
+                            if (data.length === 0) return { headers: [], rows: [] };
+                            
+                            if (typeof data[0] === 'object' && data[0] !== null) {
+                                // Collect all unique headers from all objects in the array
+                                const headers = Array.from(
+                                    new Set(
+                                        data.flatMap(item => Object.keys(item))
+                                    )
+                                );
+                                
+                                const rows = data.map(item => {
+                                    return headers.map(header => {
+                                        // If the property doesn't exist in this object, return empty string
+                                        if (!(header in item)) return '';
+                                        
+                                        const value = item[header];
+                                        if (value === null || value === undefined) return '';
+                                        if (typeof value === 'object') return JSON.stringify(value);
+                                        return String(value);
+                                    });
+                                });
+                                return { headers, rows };
+                            } else {
+                                // Handle simple array
+                                return {
+                                    headers: ['Value'],
+                                    rows: data.map(item => [String(item)])
+                                };
+                            }
+                        } 
+                        // Handle single object
+                        else if (typeof data === 'object' && data !== null) {
+                            const headers = ['Property', 'Value'];
+                            const rows = Object.entries(data).map(([key, value]) => {
+                                if (value === null || value === undefined) return [key, ''];
+                                if (typeof value === 'object') return [key, JSON.stringify(value)];
+                                return [key, String(value)];
+                            });
+                            return { headers, rows };
+                        }
+                        
+                        return null; // Not suitable for table display
+                    } catch (e) {
+                        console.error("Error converting to table:", e);
+                        return null;
                     }
                 }
             },

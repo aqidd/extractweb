@@ -4,13 +4,40 @@ from pydantic import BaseModel, Field
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, LLMConfig
 from crawl4ai.extraction_strategy import LLMExtractionStrategy
 import os
-import json
 from dotenv import load_dotenv  # Import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = FastAPI()
+
+from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
+from crawl4ai.browser_manager import BrowserManager
+
+# Patch the AsyncPlaywrightCrawlerStrategy to fix the static instance issue
+# This is a workaround for the issue where the static instance of Playwright wasn't being reset
+# after closing the browser, causing issues with multiple crawls.
+# This patch ensures that the Playwright instance is properly cleaned up after each crawl.
+# This is a temporary solution until the issue is resolved in the library.
+async def patched_async_playwright__crawler_strategy_close(self) -> None:
+    """
+    Close the browser and clean up resources.
+
+    This patch addresses an issue with Playwright instance cleanup where the static instance
+    wasn't being properly reset, leading to issues with multiple crawls.
+
+    Issue: https://github.com/unclecode/crawl4ai/issues/842
+
+    Returns:
+        None
+    """
+    await self.browser_manager.close()
+
+    # Reset the static Playwright instance
+    BrowserManager._playwright_instance = None
+
+
+AsyncPlaywrightCrawlerStrategy.close = patched_async_playwright__crawler_strategy_close
 
 # Serve static files for the Vue.js frontend
 # API routes will be defined before mounting static files
@@ -44,7 +71,7 @@ async def extract_data(request: ExtractionRequest):
     try:
         # Configure LLM settings
         llm_config = LLMConfig(
-            provider="gemini/gemini-2.0-flash",  # Gemini LLM
+            provider="gemini/gemini-2.0-flash-lite",  # Gemini LLM
             # TODO: provider using env error???
             # provider=os.getenv("LLM_PROVIDER"),  # Load provider from environment variable
             api_token=os.getenv("API_KEY")  # Load API token from environment variable
@@ -82,7 +109,7 @@ async def extract_data(request: ExtractionRequest):
 
         # Return results if successful
         if result.success:
-            return {"schema": result.model_json_schema, "data": result.extracted_content}
+            return {"schema": result.model_json_schema, "data": result.extracted_content, "raw": result}
         else:
             raise HTTPException(status_code=500, detail=result.error_message)
     except Exception as e:
