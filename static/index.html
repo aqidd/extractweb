@@ -1,0 +1,75 @@
+<!--
+2025-04-06: Fixed static file references to use /static path after backend route changes.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraper</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea, input {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h1>Web Scraper</h1>
+        <form @submit.prevent="extractData">
+            <label for="url">URL:</label>
+            <input type="text" v-model="url" required>
+            <br>
+            <label for="instruction">Instruction (optional):</label>
+            <textarea v-model="instruction"></textarea>
+            <br>
+            <button type="submit">Extract Data</button>
+        </form>
+        
+        <div v-if="response">
+            <h2>Extracted Schema:</h2>
+            <pre>{{ response.schema }}</pre>
+            <h2>Extracted Data:</h2>
+            <pre>{{ response.data }}</pre>
+        </div>
+    </div>
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            data() {
+                return {
+                    url: '',
+                    instruction: '',
+                    response: null
+                };
+            },
+            methods: {
+                async extractData() {
+                    try {
+                        const res = await fetch('/extract', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: this.url, instruction: this.instruction })
+                        });
+                        this.response = await res.json();
+                    } catch (error) {
+                        console.error(error);
+                        alert('Data extraction failed!');
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
