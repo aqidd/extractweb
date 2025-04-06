@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/languages/json.min.js"></script>
+    <!-- Add SheetJS library for Excel export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <style>
         :root {
             --primary-color: #3498db;
@@ -193,6 +195,24 @@
             border-color: var(--primary-color);
         }
         
+        .download-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .download-btn:hover {
+            background-color: #218838;
+        }
+        
         table.data-table {
             width: 100%;
             border-collapse: collapse;
@@ -290,6 +310,14 @@
                         <pre><code class="language-json">{{ prettyData }}</code></pre>
                     </div>
                     <div v-else-if="displayMode === 'table' && tableData">
+                        <button v-if="tableData.headers.length > 0" class="download-btn" @click="downloadExcel">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 9.5a.5.5 0 0 0 .5-.5V3a.5.5 0 0 0-1 0v6a.5.5 0 0 0 .5.5z"/>
+                                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V3a.5.5 0 0 0-1 0v7.293L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                                <path d="M3 12.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-1 0v.5h-8v-.5a.5.5 0 0 0-1 0v1z"/>
+                            </svg>
+                            Download as Excel
+                        </button>
                         <table v-if="tableData.headers.length > 0" class="data-table">
                             <thead>
                                 <tr>
@@ -454,6 +482,38 @@
                         this.error = error.message || 'An unexpected error occurred';
                     } finally {
                         this.loading = false;
+                    }
+                },
+                downloadExcel() {
+                    if (!this.tableData || this.tableData.headers.length === 0) return;
+                    
+                    try {
+                        // Create worksheet data
+                        const worksheet = XLSX.utils.aoa_to_sheet([
+                            this.tableData.headers,
+                            ...this.tableData.rows
+                        ]);
+                        
+                        // Create workbook
+                        const workbook = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(workbook, worksheet, "ExtractedData");
+                        
+                        // Generate filename from URL or use default name
+                        let filename = "extracted_data";
+                        if (this.url) {
+                            try {
+                                const urlObj = new URL(this.url);
+                                filename = urlObj.hostname.replace(/\./g, '_');
+                            } catch (e) {
+                                // Use default name if URL parsing fails
+                            }
+                        }
+                        
+                        // Write and download
+                        XLSX.writeFile(workbook, `${filename}.xlsx`);
+                    } catch (error) {
+                        console.error("Error downloading Excel:", error);
+                        this.error = "Failed to download Excel file. Please try again.";
                     }
                 }
             }
