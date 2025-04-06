@@ -364,8 +364,8 @@
                             data = JSON.parse(this.response.data);
                         }
                         
-                        // Check if data contains error key with true value
-                        if (data.error == true) {
+                        // Check if data is an object with error=true at the top level
+                        if (data.error === true) {
                             return null; // Don't render as table if error is true
                         }
                         
@@ -373,15 +373,20 @@
                         if (Array.isArray(data)) {
                             if (data.length === 0) return { headers: [], rows: [] };
                             
-                            if (typeof data[0] === 'object' && data[0] !== null) {
-                                // Collect all unique headers from all objects in the array
+                            // Filter out any array items that have error: true
+                            const filteredData = data.filter(item => !(item && typeof item === 'object' && item.error === true));
+                            
+                            if (filteredData.length === 0) return { headers: [], rows: [] };
+                            
+                            if (typeof filteredData[0] === 'object' && filteredData[0] !== null) {
+                                // Collect all unique headers from all objects in the array, excluding "error"
                                 const headers = Array.from(
                                     new Set(
-                                        data.flatMap(item => Object.keys(item))
+                                        filteredData.flatMap(item => Object.keys(item))
                                     )
-                                );
+                                ).filter(header => header !== 'error');
                                 
-                                const rows = data.map(item => {
+                                const rows = filteredData.map(item => {
                                     return headers.map(header => {
                                         // If the property doesn't exist in this object, return empty string
                                         if (!(header in item)) return '';
@@ -397,18 +402,20 @@
                                 // Handle simple array
                                 return {
                                     headers: ['Value'],
-                                    rows: data.map(item => [String(item)])
+                                    rows: filteredData.map(item => [String(item)])
                                 };
                             }
                         } 
                         // Handle single object
                         else if (typeof data === 'object' && data !== null) {
                             const headers = ['Property', 'Value'];
-                            const rows = Object.entries(data).map(([key, value]) => {
-                                if (value === null || value === undefined) return [key, ''];
-                                if (typeof value === 'object') return [key, JSON.stringify(value)];
-                                return [key, String(value)];
-                            });
+                            const rows = Object.entries(data)
+                                .filter(([key]) => key !== 'error') // Filter out error property
+                                .map(([key, value]) => {
+                                    if (value === null || value === undefined) return [key, ''];
+                                    if (typeof value === 'object') return [key, JSON.stringify(value)];
+                                    return [key, String(value)];
+                                });
                             return { headers, rows };
                         }
                         
