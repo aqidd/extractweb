@@ -45,6 +45,26 @@ class ExtractionRequest(BaseModel):
     url: str
     instruction: str = None
 
+class PageSummary(BaseModel):
+    topic: str = Field(..., description="Title of the topic.")
+    keywords: list[str] = Field(..., description="Keywords for the topic content.")
+    summary: str = Field(..., description="Summary of the topic.")
+
+# Convert the schema dictionary into a Pydantic model
+def schema_dict_to_pydantic(schema_dict):
+    fields = {}
+    for key, value in schema_dict.get("properties", {}).items():
+        field_type = {
+            "string": str,
+            "integer": int,
+            "number": float,
+            "boolean": bool,
+            "array": list,
+            "object": dict
+        }.get(value.get("type", "string"), str)
+        fields[key] = (field_type, Field(..., description=value.get("description", "")))
+    return create_model("DynamicSchema", **fields)
+
 def generate_schema_from_instruction(instruction: str, llm_provider="openai/gpt-4"):
     """
     Dynamically generates a Pydantic schema using an LLM.
@@ -92,38 +112,8 @@ def generate_schema_from_instruction(instruction: str, llm_provider="openai/gpt-
         
         if not schema_dict:
             raise ValueError("Empty schema dictionary.")
-            
-        # Convert the schema dictionary into a Pydantic model
-        # Map JSON schema types to Python types
-        type_mapping = {
-            "string": str,
-            "integer": int,
-            "number": float,
-            "boolean": bool,
-            "array": list,
-            "object": dict
-        }
-        
-        fields = {}
-        for key, value in schema_dict.get("properties", {}).items():
-            field_type = type_mapping.get(value.get("type", "string"), str)
-            
-            # Handle array types with items specification
-            if value.get("type") == "array" and "items" in value:
-                item_type = type_mapping.get(value["items"].get("type", "string"), str)
-                field_type = list[item_type]
-            
-            # Add Field with description if available
-            description = value.get("description", "")
-            fields[key] = (field_type, Field(..., description=description))
-            
-        # Create model and explicitly rebuild it
-        InferredSchema = create_model("InferredSchema", **fields)
-        InferredSchema.model_rebuild()
-        
-        print("infer schema from LLM")
-        print(InferredSchema.schema_json())
-        return InferredSchema.schema_json()
+
+        return schema_dict_to_pydantic(schema_dict)
     except (KeyError, AttributeError) as e:
         print(f"Error processing LLM response: {e}")
         print(f"Raw response: {response}")
@@ -132,22 +122,8 @@ def generate_schema_from_instruction(instruction: str, llm_provider="openai/gpt-
         print(f"JSON decode error: {e}")
         print(f"Raw content: {content}")
         # Return a simple default schema as fallback
-        default_schema = {
-            "title": "DefaultSchema",
-            "type": "object",
-            "properties": {
-                "extracted_text": {
-                    "type": "string",
-                    "description": "Raw extracted content"
-                }
-            }
-        }
+        default_schema = PageSummary.model_json_schema()
         return json.dumps(default_schema)
-
-class PageSummary(BaseModel):
-    topic: str = Field(..., description="Title of the topic.")
-    keywords: list[str] = Field(..., description="Keywords for the topic content.")
-    summary: str = Field(..., description="Summary of the topic.")
 
 @app.post("/extract")
 async def extract_data(request: ExtractionRequest):
