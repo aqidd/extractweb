@@ -157,7 +157,7 @@ async def extract_data(request: ExtractionRequest):
         # Configure LLM settings
         llm_config = LLMConfig(
             provider="gemini/gemini-2.0-flash-lite",  # Gemini LLM
-            # api_token="AIzaSyCILzDnpBNc7dhBjvJGWRuIV6Gs4pRuABM"
+            # api_token=""
             api_token=os.getenv("GEMINI_API_KEY"),  # Load API token from environment variable
             # TODO: provider using env error???
             # provider=os.getenv("LLM_PROVIDER"),  # Load provider from environment variable
