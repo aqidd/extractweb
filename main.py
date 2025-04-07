@@ -1,5 +1,7 @@
 import json
 import os
+import re
+from fastapi.responses import FileResponse
 import litellm
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -64,7 +66,6 @@ def generate_schema_from_instruction(instruction: str, llm_provider="openai/gpt-
         content = response.choices[0].message.content
         
         # Try to extract JSON from markdown code blocks if present
-        import re
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
         
         if json_match:
@@ -165,11 +166,13 @@ async def extract_data(request: ExtractionRequest):
 
         # Define the extraction strategy
         if request.instruction and request.instruction.strip():
-            generate_schema_from_instruction(request.instruction)
+            page_schema = generate_schema_from_instruction(request.instruction)
+            if not page_schema:
+                page_schema = PageSummary.model_json_schema(),  # Use default schema
             # Use schema-based extraction with the provided instruction
             extraction_strategy = LLMExtractionStrategy(
                 llm_config=llm_config,
-                schema=PageSummary.model_json_schema(),  # Use the defined schema
+                schema=page_schema,
                 instruction=request.instruction,
                 extraction_type="schema",
                 chunk_token_threshold=1000,  # Process chunks of 1000 tokens at a time
@@ -204,8 +207,8 @@ async def extract_data(request: ExtractionRequest):
 
 # Mount static files AFTER defining API routes
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # Serve index.html at the root
 @app.get("/")
 async def read_index():
-    from fastapi.responses import FileResponse
     return FileResponse("static/index.html")
