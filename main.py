@@ -1,18 +1,19 @@
+import json
+import os
+import litellm
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, LLMConfig
 from crawl4ai.extraction_strategy import LLMExtractionStrategy
-import os
+from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
+from crawl4ai.browser_manager import BrowserManager
 from dotenv import load_dotenv  # Import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = FastAPI()
-
-from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
-from crawl4ai.browser_manager import BrowserManager
 
 # Patch the AsyncPlaywrightCrawlerStrategy to fix the static instance issue
 # This is a workaround for the issue where the static instance of Playwright wasn't being reset
@@ -36,11 +37,7 @@ async def patched_async_playwright__crawler_strategy_close(self) -> None:
     # Reset the static Playwright instance
     BrowserManager._playwright_instance = None
 
-
 AsyncPlaywrightCrawlerStrategy.close = patched_async_playwright__crawler_strategy_close
-
-# Serve static files for the Vue.js frontend
-# API routes will be defined before mounting static files
 
 class ExtractionRequest(BaseModel):
     url: str
@@ -50,39 +47,129 @@ def generate_schema_from_instruction(instruction: str, llm_provider="openai/gpt-
     """
     Dynamically generates a Pydantic schema using an LLM.
     """
-    from pydantic import BaseModel
-    from typing import Dict, Any
-    # Simple simulated schema inference for demonstration
-    class InferredSchema(BaseModel):  # This could be dynamically generated.
-        products: list[Dict[str, str]]
-    return InferredSchema.schema_json()
+    prompt = f"""
+    You are an AI that generates JSON schemas based on instructions. 
+    Instruction: {instruction}
+    Provide a JSON schema that matches the instruction.
+    """
+    response = litellm.completion(
+        model="gemini/gemini-2.0-flash-lite",
+        messages=[{"role": "user", "content": prompt}],
+        api_key=os.getenv("GEMINI_API_KEY")
+    )
 
-class ExtractionRequest(BaseModel):
-    url: str
-    instruction: str = None  # Optional instruction, defaults to None
+    # Extract the response content correctly from the litellm response
+    try:
+        # The structure from litellm may vary based on provider
+        content = response.choices[0].message.content
+        
+        # Try to extract JSON from markdown code blocks if present
+        import re
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+        
+        if json_match:
+            # Extract JSON from code block
+            schema_dict = json.loads(json_match.group(1))
+        else:
+            # Try to find any JSON-like structure in the text
+            potential_json = re.search(r'(\{[^}]*\})', content, re.DOTALL)
+            if potential_json:
+                schema_dict = json.loads(potential_json.group(1))
+            else:
+                # Direct parsing as a last resort
+                try:
+                    schema_dict = json.loads(content)
+                except json.JSONDecodeError:
+                    print("Could not parse JSON directly from content")
+                    # Create a simple fallback schema if parsing fails
+                    schema_dict = {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "Extracted content"}
+                        }
+                    }
+        
+        if not schema_dict:
+            raise ValueError("Empty schema dictionary.")
+            
+        # Convert the schema dictionary into a Pydantic model
+        # Map JSON schema types to Python types
+        type_mapping = {
+            "string": str,
+            "integer": int,
+            "number": float,
+            "boolean": bool,
+            "array": list,
+            "object": dict
+        }
+        
+        fields = {}
+        for key, value in schema_dict.get("properties", {}).items():
+            field_type = type_mapping.get(value.get("type", "string"), str)
+            
+            # Handle array types with items specification
+            if value.get("type") == "array" and "items" in value:
+                item_type = type_mapping.get(value["items"].get("type", "string"), str)
+                field_type = list[item_type]
+            
+            # Add Field with description if available
+            description = value.get("description", "")
+            fields[key] = (field_type, Field(..., description=description))
+            
+        # Create model and explicitly rebuild it
+        InferredSchema = create_model("InferredSchema", **fields)
+        InferredSchema.model_rebuild()
+        
+        print("infer schema from LLM")
+        print(InferredSchema.schema_json())
+        return InferredSchema.schema_json()
+    except (KeyError, AttributeError) as e:
+        print(f"Error processing LLM response: {e}")
+        print(f"Raw response: {response}")
+        raise ValueError(f"Failed to generate schema from instruction. Error: {str(e)}")
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        print(f"Raw content: {content}")
+        # Return a simple default schema as fallback
+        default_schema = {
+            "title": "DefaultSchema",
+            "type": "object",
+            "properties": {
+                "extracted_text": {
+                    "type": "string",
+                    "description": "Raw extracted content"
+                }
+            }
+        }
+        return json.dumps(default_schema)
 
 class PageSummary(BaseModel):
-    title: str = Field(..., description="Title of the page.")
-    summary: str = Field(..., description="Summary of the page.")
-    keywords: list = Field(..., description="Keywords for the page content.")
+    topic: str = Field(..., description="Title of the topic.")
+    keywords: list[str] = Field(..., description="Keywords for the topic content.")
+    summary: str = Field(..., description="Summary of the topic.")
 
 @app.post("/extract")
 async def extract_data(request: ExtractionRequest):
     try:
+        print(os.getenv("GEMINI_API_KEY"))
+        print(os.getenv("GROQ_API_KEY"))
         # Configure LLM settings
         llm_config = LLMConfig(
             provider="gemini/gemini-2.0-flash-lite",  # Gemini LLM
+            # api_token="AIzaSyCILzDnpBNc7dhBjvJGWRuIV6Gs4pRuABM"
+            api_token=os.getenv("GEMINI_API_KEY"),  # Load API token from environment variable
             # TODO: provider using env error???
             # provider=os.getenv("LLM_PROVIDER"),  # Load provider from environment variable
-            api_token=os.getenv("API_KEY")  # Load API token from environment variable
+            # api_token=os.getenv("API_KEY")  # Load API token f    rom environment variable
         )
 
         # Define the extraction strategy
         if request.instruction and request.instruction.strip():
+            generate_schema_from_instruction(request.instruction)
             # Use schema-based extraction with the provided instruction
             extraction_strategy = LLMExtractionStrategy(
                 llm_config=llm_config,
-                schema=PageSummary.schema_json(),  # Use the defined schema
+                schema=PageSummary.model_json_schema(),  # Use the defined schema
                 instruction=request.instruction,
                 extraction_type="schema",
                 chunk_token_threshold=1000,  # Process chunks of 1000 tokens at a time
